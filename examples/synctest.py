@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-# coding: utf-8
+"""
 
+"""
+
+import time
 import tldevicesync
+rpc = [['vector.data.decimation', 'i32', '5']]
+tio = tldevicesync.DeviceSync(connectionTime=5, rpcs=rpc)
 
-tio = tldevicesync.DeviceSync()
+streams = []
+streams += [tio.vmr0.vector]
+# streams += [tio.vmr0.accel]
+streams += [tio.vmr1.accel]
+ss = tldevicesync.SyncStream(streams)
 
-syncStreams = tio.syncStreamsStart([tio.vmr0.vector,tio.vmr1.vector])
-data = tio.syncStreamsRead(syncStreams, samples=3)
-print(data)
+for row in ss.iter():
+  print(row)
+  time.sleep(1)

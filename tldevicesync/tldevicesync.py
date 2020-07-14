@@ -11,11 +11,12 @@ import threading
 import time
 
 class DeviceSync():
-  def __init__(self, url="tcp://localhost", verbose=False, rpcs=[], stateCache=True, connectingMessage = True, connectionTime = 1):
+  def __init__(self, url="tcp://localhost", verbose=False, rpcs=[], rpcsSync=[], stateCache=True, connectingMessage = True, connectionTime = 1):
     self._routes = {}
-    self._routes["/"] = tldevice.Device(url=url, verbose=verbose, rpcs=rpcs, stateCache=stateCache, connectingMessage=connectingMessage)
+    self._routes["/"] = tldevice.Device(url=url, verbose=verbose, rpcs=rpcsSync, stateCache=stateCache, connectingMessage=connectingMessage)
     self._routes["/"]._tio.recv_router = self._recvRouter
     self.__dict__[self._routes["/"]._shortname] = self._routes["/"]
+    self.rpcs = rpcs
     time.sleep(connectionTime)
 
   def _recvRouter(self, routing, packet):
@@ -24,7 +25,7 @@ class DeviceSync():
         self._routes[routingKey]._tio.recv_queue.put(packet)
     else: # Create new route
       #print(f"Creating route to {routingKey}.")
-      self._routes[routingKey] = tldevice.Device(url="router://interthread/"+routingKey, send_router = self._routes["/"]._tio.send, verbose=True, specialize=False)
+      self._routes[routingKey] = tldevice.Device(url="router://interthread/"+routingKey, send_router = self._routes["/"]._tio.send, rpcs=self.rpcs, verbose=True, specialize=False)
       threading.Thread(target=self._specialize, args=(routingKey,)).start()
 
   def _specialize(self, routingKey):
@@ -96,9 +97,10 @@ class SyncStream():
     else:
       starttimes = [timecol[0] for timecol in times]
 
-    if max(starttimes) != min(starttimes):
-      delta = max(starttimes) - min(starttimes)
-      raise Exception(f"Streams out of sync by {delta}!")
+    print(starttimes)
+    # if max(starttimes) != min(starttimes):
+    #   delta = max(starttimes) - min(starttimes)
+    #   raise Exception(f"Streams out of sync by {delta}!")
     
     if timeaxis:
       data = [times[0]] + data
