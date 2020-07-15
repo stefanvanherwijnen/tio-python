@@ -11,11 +11,12 @@ import threading
 import time
 
 class DeviceSync():
-  def __init__(self, url="tcp://localhost", verbose=False, rpcs=[], stateCache=True, connectingMessage = True, connectionTime = 1):
+  def __init__(self, url="tcp://localhost", verbose=False, rpcs=[], rpcsSync=[], stateCache=True, connectingMessage = True, connectionTime = 1):
     self._routes = {}
-    self._routes["/"] = tldevice.Device(url=url, verbose=verbose, rpcs=rpcs, stateCache=stateCache, connectingMessage=connectingMessage)
+    self._routes["/"] = tldevice.Device(url=url, verbose=verbose, rpcs=rpcsSync, stateCache=stateCache, connectingMessage=connectingMessage)
     self._routes["/"]._tio.recv_router = self._recvRouter
     self.__dict__[self._routes["/"]._shortname] = self._routes["/"]
+    self.rpcs = rpcs
     time.sleep(connectionTime)
 
   def _recvRouter(self, routing, packet):
@@ -24,11 +25,11 @@ class DeviceSync():
         self._routes[routingKey]._tio.recv_queue.put(packet)
     else: # Create new route
       #print(f"Creating route to {routingKey}.")
-      self._routes[routingKey] = tldevice.Device(url="router://interthread/"+routingKey, send_router = self._routes["/"]._tio.send, verbose=True, specialize=False)
+      self._routes[routingKey] = tldevice.Device(url="router://interthread/"+routingKey, send_router = self._routes["/"]._tio.send, rpcs=self.rpcs, verbose=True, specialize=False)
       threading.Thread(target=self._specialize, args=(routingKey,)).start()
 
   def _specialize(self, routingKey):
-    self._routes[routingKey]._specialize()
+    self._routes[routingKey]._specialize(stateCache=False)
     self._routes[routingKey]._shortname += routingKey
     #self._routes[routingKey]._tio.shortname = self._routes[routingKey]._shortname
     self.__dict__[self._routes[routingKey]._shortname] = self._routes[routingKey]
@@ -53,77 +54,59 @@ class DeviceSync():
         exitmsg = exit_msg)
 
 class SyncStream():
-  def __init__(self, streams = []):
-    self.streams = streams
+  def __init__(self, devices = []):
+    self.devices = devices
 
   def sync(self, flush=True):
     # Find the initial datum time
     times = []
-    data = []
-    for stream in self.streams:
-      row = stream(samples=1, flush=flush, timeaxis=True)
-      times += [row[0]]
-      data += row[1:]
+    for device in self.devices:
+      data = device._tio.stream_read_parsed(flush=True)
+      times.append(data['time'])
 
     # Ensure the times match up!
-    # If not, catch up on the streams that are behind
+    # If not, catch up on the devices that are behind
     maxtime = max(times)
     mintime = min(times)
     if maxtime != mintime:
-      for i,stream in enumerate(self.streams):
+      for i,device in enumerate(self.devices):
         max_deviation = 0
         while times[i] < maxtime:
-          print(f"Drop a sample on stream {i}")
-          times[i] = stream(samples=1, flush=False, timeaxis=True)[0]
-          max_deviation -= 1
+          print(f"Drop a sample from stream {i}")
+          times[i] = device._tio.stream_read_parsed(flush=False)['time']
+          max_deviation += 1
           if max_deviation > 5:
             raise Exception("Can't sync stream!")
 
-  def read(self, samples = 1, duration=None, timeaxis=True, sync=True):
+  def read(self, sync=True):
     if sync:
       self.sync()
 
     # Acquire data
-    times = []
-    data = [] 
-    for stream in self.streams:
-      streamdata = stream(samples=samples, duration=duration, flush=False, timeaxis=True)
-      times += [streamdata[0]]
-      data += streamdata[1:]
+    streamdata = {}
+    starttimes = []
+    for device in self.devices:
+      data = device._tio.stream_read_parsed(flush=False)
+      streamdata[device._shortname] = data
+      starttimes.append(data['time'])
     
-    if samples == 1:
-      starttimes = times
-    else:
-      starttimes = [timecol[0] for timecol in times]
-
     if max(starttimes) != min(starttimes):
       delta = max(starttimes) - min(starttimes)
       raise Exception(f"Streams out of sync by {delta}!")
-    
-    if timeaxis:
-      data = [times[0]] + data
 
-    return data
-    
-  def columnnames(self, timeaxis=True):
-    # TODO: Get resource shortname + routing; vmr0.vector.x
-    names = []
-    for stream in self.streams:
-      names += stream.columnnames()
-    if timeaxis:
-      names = ["time"] + names
-    return names
+    return streamdata
 
   def iter(self, samples=0, sync=True):
     if sync:
-      yield self.read(samples = 1, sync=sync)
-      samples -= 1
-    if samples<=0:
-      while True:
-        yield self.read(samples = 1, sync=False)
+      yield self.read(sync=True)
+    counter = samples
+    if counter:
+      while counter > 0:
+        yield self.read(sync=False)
+        counter -= 1
     else:
-      for x in range(number):
-        yield self.read(samples = 1, sync=False)
+      while True:
+        yield self.read(sync=False)
   
 if __name__ == "__main__":
   device = DeviceSync()

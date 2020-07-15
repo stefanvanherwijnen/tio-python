@@ -36,6 +36,9 @@ class TIOSession(object):
     logging.basicConfig(level=logLevel)
     self.logger = logging.getLogger('tio-session')
 
+    # Set RPC's
+    self.rpcs = rpcs
+
     # Connect to either TCP socket or serial port
     self.uri = urllib.parse.urlparse(url)
     if self.uri.scheme in ["tcp", "udp"]:
@@ -111,9 +114,11 @@ class TIOSession(object):
     # Don't specialize if you don't have a solid connection yet (ie in multi device sync)
     self.specialized = False
     if specialize:
-      self.specialize(rpcs=rpcs, stateCache=stateCache, connectingMessage=connectingMessage)
+      self.specialize(rpcs=self.rpcs, stateCache=stateCache, connectingMessage=connectingMessage)
 
   def specialize(self, rpcs=[], stateCache=True, connectingMessage=True):
+    if not rpcs:
+      rpcs = self.rpcs
     # Startup RPCs
     for topic, rpcType, value in rpcs:
       if type(rpcType) is str: # Find type from dict of types
@@ -396,6 +401,34 @@ class TIOSession(object):
     if samples == 1:
       data = data[0]
     return data
+
+  def stream_read_parsed(self, flush=True):
+    if flush:
+      self.pub_flush()
+    parsedPacket = self.pub_queue.get()
+    if parsedPacket['type'] == TL_PTYPE_STREAM0:
+      time, data = self.protocol.stream_data(parsedPacket, timeaxis=True)
+
+      xyz = { 'x': None, 'y': None, 'z': None}
+      parsedData = {'time': time,
+                    'vector': { 'x': None, 'y': None, 'z': None}, 
+                    'accel': { 'x': None, 'y': None, 'z': None},
+                    'gyro': { 'x': None, 'y': None, 'z': None},
+                    'bar': None,
+                    'therm': None
+                    }
+      def put(d, keys, item):
+          if "." in keys:
+              key, rest = keys.split(".", 1)
+              if key not in d:
+                  d[key] = {}
+              put(d[key], rest, item)
+          else:
+              d[keys] = item
+
+      for idx,column in enumerate(self.protocol.columns[:len(data)]):
+        put(parsedData, column, data[idx])
+      return parsedData
 
   def stream_read_topic_raw(self, topic, samples = 10, timeaxis=False):
     streamInfo = self.protocol.columnsByName[topic]
