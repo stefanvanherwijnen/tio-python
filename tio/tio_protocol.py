@@ -195,7 +195,6 @@ class TIOProtocol(object):
       parsedPacket['timebase_flags']           = int(timebaseDescription[6])
       parsedPacket['timebase_stability_ppb']   = float(timebaseDescription[7])*1e9
       parsedPacket['timebase_src_params']      = timebaseDescription[8:8+16]
-
       # Derive period
       if parsedPacket['timebase_period_denom_us'] is not 0 \
         and parsedPacket['timebase_period_num_us'] is not 0:
@@ -264,7 +263,6 @@ class TIOProtocol(object):
       parsedPacket['stream_sample_number']    = int(streamDescription[4])
       parsedPacket['stream_total_components'] = int(streamDescription[5])
       parsedPacket['stream_flags']            = int(streamDescription[6])
-
       self.logger.debug(f"stream {parsedPacket['stream_id']}: timebase {parsedPacket['stream_timebase_id']}, sources {parsedPacket['stream_total_components']}")
 
       if parsedPacket['stream_id'] == 0: # Only support stream 0
@@ -373,5 +371,4 @@ class TIOProtocol(object):
       return time,data
     else:
       return data
-
     return (sample_time,)+data
