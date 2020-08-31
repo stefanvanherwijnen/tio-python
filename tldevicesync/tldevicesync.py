@@ -75,8 +75,8 @@ class SyncStream():
           print(f"Drop a sample from stream {i}")
           times[i] = device._tio.stream_read_parsed(flush=False)['time']
           max_deviation += 1
-          if max_deviation > 5:
-            raise Exception("Can't sync stream!")
+          # if max_deviation > 5:
+          #   raise Exception("Can't sync stream!")
 
   def read(self, sync=True):
     if sync:
@@ -92,7 +92,9 @@ class SyncStream():
     
     if max(starttimes) != min(starttimes):
       delta = max(starttimes) - min(starttimes)
-      raise Exception(f"Streams out of sync by {delta}!")
+      self.sync()
+      print(f"Streams out of sync by {delta}!")
+      # raise Exception(f"Streams out of sync by {delta}!")
 
     return streamdata
 
