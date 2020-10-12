@@ -31,7 +31,6 @@ streams += [tio.vmr1]
 ss = tldevicesync.SyncStream(streams)
     
 term = blessings.Terminal()
-lastSample = None
 fields = ['vector.x', 'vector.y', 'vector.z', 'accel.x', 'accel.y', 'accel.z', 'gyro.x', 'gyro.y', 'gyro.z', 'bar', 'therm']
 for row in ss.iter():
   for name, device in row.items():
@@ -39,6 +38,6 @@ for row in ss.iter():
     for field in fields:
       data = get(device, field)
       sys.stdout.write(f"\r\n {field}: {data or ''}")
-
+  sys.stdout.write(f"\r\n {row['vmr0']['vector']['x'] - row['vmr1']['vector']['x']}")
   sys.stdout.write(term.clear_eos)
-  sys.stdout.write(term.move_up*(len(row)*(len(fields)+1)))
+  sys.stdout.write(term.move_up*(1+len(row)*(len(fields)+1)))
